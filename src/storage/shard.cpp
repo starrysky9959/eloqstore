@@ -2,10 +2,12 @@
 
 #include <glog/logging.h>
 
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <chrono>
 #include <cstddef>
+#include <functional>
 #include <memory>
 #include <string>
 #include <utility>
