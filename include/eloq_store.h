@@ -131,6 +131,13 @@ public:
     {
         return false;
     }
+    virtual uint64_t PendingTime() const
+    {
+        return 0;
+    }
+    virtual void SetPendingTime(uint64_t /*us*/)
+    {
+    }
     bool ReadOnly() const;
     KvError Error() const;
     bool RetryableErr() const;
@@ -470,10 +477,19 @@ public:
     {
         return clean_;
     }
+    void SetPendingTime(uint64_t us) override
+    {
+        pending_time_us_ = us;
+    }
+    uint64_t PendingTime() const override
+    {
+        return pending_time_us_;
+    }
 
 private:
     std::string tag_;
     bool clean_{false};
+    uint64_t pending_time_us_{0};
 
     friend class EloqStore;
     friend class ReopenTask;

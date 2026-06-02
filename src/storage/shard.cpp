@@ -118,7 +118,8 @@ void Shard::WorkLoop()
     {
         size_t nreqs = requests_.try_dequeue_bulk(reqs.data(), reqs.size());
         // Idle state, wait for new requests or exit.
-        while (nreqs == 0 && task_mgr_.NumActive() == 0 && io_mgr_->IsIdle())
+        while (nreqs == 0 && task_mgr_.NumActive() == 0 && io_mgr_->IsIdle() &&
+               delayed_requests_.empty())
         {
             const auto status = store_->status_.load(std::memory_order_relaxed);
             if (io_mgr_->IsStoreStopping() ||
@@ -166,6 +167,7 @@ void Shard::WorkLoop()
         io_mgr_->Submit();
 
         io_mgr_->PollComplete();
+        ProcessDelayedRequests();
         ExecuteReadyTasks();
 
         int nreqs = dequeue_requests();
@@ -303,6 +305,40 @@ void Shard::EnqueueForAutoReopen(KvRequest *req)
     };
     pending_q.PushFront(reopen_req);
     TryStartPendingWrite(tbl_id);
+}
+
+void Shard::EnqueueDelayedRequest(KvRequest *req)
+{
+    uint64_t delay_us = req->PendingTime();
+    if (delay_us == 0)
+    {
+        ProcessReq(req);
+        return;
+    }
+
+    const uint64_t execute_at = ReadTimeMicroseconds() + delay_us;
+    delayed_requests_.push_back({req, execute_at});
+    std::push_heap(delayed_requests_.begin(),
+                   delayed_requests_.end(),
+                   std::greater<DelayedEntry>());
+}
+
+void Shard::ProcessDelayedRequests()
+{
+    const uint64_t now_us = ReadTimeMicroseconds();
+    while (!delayed_requests_.empty() &&
+           delayed_requests_.front().execute_at_us <= now_us)
+    {
+        std::pop_heap(delayed_requests_.begin(),
+                      delayed_requests_.end(),
+                      std::greater<DelayedEntry>());
+        DelayedEntry entry = std::move(delayed_requests_.back());
+        delayed_requests_.pop_back();
+
+        // Clear pending time so ProcessReq won't re-enqueue.
+        entry.request->SetPendingTime(0);
+        ProcessReq(entry.request);
+    }
 }
 
 void Shard::AddPendingCompact(const TableIdent &tbl_id)
@@ -676,6 +712,11 @@ bool Shard::ProcessReq(KvRequest *req)
     }
     case RequestType::Reopen:
     {
+        if (req->PendingTime() > 0)
+        {
+            EnqueueDelayedRequest(req);
+            return true;
+        }
         ReopenTask *task = task_mgr_.GetReopenTask(req->TableId());
         auto lbd = [task, req]() -> KvError
         { return task->Reopen(req->TableId()); };
@@ -974,8 +1015,8 @@ void Shard::WorkOneRound()
     KvRequest *reqs[128];
     size_t nreqs = requests_.try_dequeue_bulk(reqs, std::size(reqs));
 
-    bool is_idle_round =
-        nreqs == 0 && task_mgr_.NumActive() == 0 && io_mgr_->IsIdle();
+    bool is_idle_round = nreqs == 0 && task_mgr_.NumActive() == 0 &&
+                         io_mgr_->IsIdle() && delayed_requests_.empty();
     if (is_idle_round)
     {
         if (stop_requested)
@@ -1018,6 +1059,7 @@ void Shard::WorkOneRound()
     io_mgr_->Submit();
 
     io_mgr_->PollComplete();
+    ProcessDelayedRequests();
     if (DurationMicroseconds(ts_) < FLAGS_max_processing_time_microseconds)
     {
         ExecuteReadyTasks();
