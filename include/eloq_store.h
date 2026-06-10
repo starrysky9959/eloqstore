@@ -190,6 +190,7 @@ public:
     void SetArgs(TableIdent tbl_id, std::string_view key);
     void SetArgs(TableIdent tbl_id, std::string key);
     std::string_view Key() const;
+    void MaterializeKey();
 
     void SetReopen(bool v)
     {

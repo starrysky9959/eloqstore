@@ -295,6 +295,10 @@ void Shard::EnqueueForAutoReopen(KvRequest *req)
             owned_req = std::move(it->second.request);
             pending_reopens_.erase(it);
         }
+        LOG(INFO) << "Auto-reopen completed for " << tbl_id.tbl_name_
+                  << " partition=" << tbl_id.partition_id_
+                  << " error=" << static_cast<uint32_t>(reopen_err)
+                  << " waiters=" << waiters.size();
         for (KvRequest *pending_req : waiters)
         {
             if (reopen_err != KvError::NoError)
@@ -303,11 +307,15 @@ void Shard::EnqueueForAutoReopen(KvRequest *req)
             }
             else if (!store->SendRequest(pending_req))
             {
+                LOG(WARNING) << "Auto-reopen: SendRequest failed after reopen";
                 pending_req->SetDone(KvError::NotRunning);
             }
         }
     };
     pending_q.PushFront(reopen_req);
+    LOG(INFO) << "Auto-reopen dispatched for " << tbl_id.tbl_name_
+              << " partition=" << tbl_id.partition_id_
+              << " pending_time_us=" << reopen_req->PendingTime();
     TryStartPendingWrite(tbl_id);
 }
 
@@ -541,6 +549,7 @@ bool Shard::ProcessReq(KvRequest *req)
         auto *read_req = static_cast<ReadRequest *>(req);
         if (read_req->Reopen())
         {
+            read_req->MaterializeKey();
             read_req->SetReopen(false);
             EnqueueForAutoReopen(req);
             return true;
