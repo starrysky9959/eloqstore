@@ -280,6 +280,8 @@ void Shard::EnqueueForAutoReopen(KvRequest *req)
     reopen_req->SetArgs(tbl_id);
     reopen_req->SetTag("");
     reopen_req->SetClean(false);
+    reopen_req->SetPendingTime(
+        store_->Options().auto_reopen_pending_time_us);
     reopen_req->callback_ = [this, tbl_id](KvRequest *done_req)
     {
         KvError reopen_err = done_req->Error();
