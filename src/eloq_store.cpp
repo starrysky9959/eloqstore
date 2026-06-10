@@ -2474,14 +2474,6 @@ std::string_view ReadRequest::Key() const
                              : std::get<std::string>(key_);
 }
 
-void ReadRequest::MaterializeKey()
-{
-    if (key_.index() == 0)
-    {
-        key_.emplace<std::string>(std::get<std::string_view>(key_));
-    }
-}
-
 void FloorRequest::SetArgs(TableIdent tbl_id, const char *key)
 {
     assert(key != nullptr);

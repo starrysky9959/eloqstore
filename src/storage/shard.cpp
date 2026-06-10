@@ -540,7 +540,6 @@ bool Shard::ProcessReq(KvRequest *req)
         auto *read_req = static_cast<ReadRequest *>(req);
         if (read_req->Reopen())
         {
-            read_req->MaterializeKey();
             read_req->SetReopen(false);
             EnqueueForAutoReopen(req);
             return true;
