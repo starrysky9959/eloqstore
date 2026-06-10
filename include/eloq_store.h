@@ -191,6 +191,15 @@ public:
     void SetArgs(TableIdent tbl_id, std::string key);
     std::string_view Key() const;
 
+    void SetReopen(bool v)
+    {
+        reopen_ = v;
+    }
+    bool Reopen() const
+    {
+        return reopen_;
+    }
+
     // output
     std::string value_;
     uint64_t ts_;
@@ -219,6 +228,7 @@ public:
     // just give me the value bytes" pattern. Ignored when the destination
     // is `std::monostate`.
     bool large_value_only_{false};
+    bool reopen_{false};
 
 private:
     // input

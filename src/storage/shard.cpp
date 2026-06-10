@@ -536,6 +536,14 @@ bool Shard::ProcessReq(KvRequest *req)
     {
     case RequestType::Read:
     {
+        auto *read_req = static_cast<ReadRequest *>(req);
+        if (read_req->Reopen())
+        {
+            read_req->SetReopen(false);
+            EnqueueForAutoReopen(req);
+            return true;
+        }
+
         ReadTask *task = task_mgr_.GetReadTask();
         auto lbd = [task, req]() -> KvError
         {
